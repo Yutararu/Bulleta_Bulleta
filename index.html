@@ -131,9 +131,10 @@ canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
     const x = e.clientX-r.left, y=e.clientY-r.top;
     
-    if (gameState === 'INIT') {
-        // 最初のクリックでBGM(タイトル曲)を起動し、タイトル画面へ移行
-        playBGM('title');
+if (gameState === 'INIT') {
+        if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
         setGameState('TITLE');
         return;
     }
@@ -171,12 +172,13 @@ function handleTouch(e){
    for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
 
-        if (gameState === 'INIT') {
-            playBGM('title');
+if (gameState === 'INIT') {
+            if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
             setGameState('TITLE');
             continue;
         }
-
         if(gameState==='TITLE'&&isTitleAnimFinished){
             if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
             else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
@@ -451,10 +453,6 @@ function setGameState(nextState) {
     transitionAlpha = 0;
     uiFadeProgress = 0;
 
-    // ★ この3行を追加して置き換えます
-    if (nextState === 'TITLE') {
-        playBGM('title'); // タイトル画面に戻った時に Time_Travel.mp3 を再生
-    }
 }
 function updateTransition() {
     if (transitionActive) {
@@ -1378,10 +1376,11 @@ function update() {
                     introPhase = 'BLACK_GAP';
                     introLogoTimer = 0;
                 }
-            } else if (introPhase === 'BLACK_GAP') {
+} else if (introPhase === 'BLACK_GAP') {
                 introLogoTimer++;
                 if (introLogoTimer >= INTRO_BLACK_GAP_FRAMES) {
                     introPhase = 'TITLE_ANIM';
+                    playBGM('title'); // ★ タイトルアニメーション開始時にBGMを再生
                     titleAnimFrame = 1;
                     titleAnimTimer = 0;
                 }
