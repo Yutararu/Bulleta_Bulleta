@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- Web App（ホーム画面に追加時や全画面時）用指定 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Bulleta Bulleta </title>
 <style>
         body { 
@@ -139,6 +142,10 @@ function getCreditsButtonRect() {
 function getCreditsBackButtonRect() {
     return getHowToBackButtonRect();
 }
+function getFullscreenButtonRect() {
+    const bw = 120, bh = 40;
+    return { bx: canvas.width - bw - 20, by: 20, bw, bh };
+}
 function getChoiceRects() {
     const bw = Math.min(380, canvas.width * 0.78), bh = Math.min(68, canvas.height * 0.11);
     const bx = (canvas.width - bw) / 2;
@@ -183,6 +190,7 @@ canvas.addEventListener('click', e => {
     }
     
 if (gameState === 'INIT') {
+        requestFullScreen(); // ★ タップ時に自動的に全画面化
         if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
@@ -191,7 +199,8 @@ if (gameState === 'INIT') {
     }
 
     if(gameState==='TITLE'&&isTitleAnimFinished){
-        if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
+        if(isPointInRect(x,y,getFullscreenButtonRect())) toggleFullscreen(); // ★ 全画面ボタン判定
+        else if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
         else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
         else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
     }else if(gameState==='HOW_TO_PLAY'){
@@ -227,14 +236,16 @@ function handleTouch(e){
         const t=e.touches[i];
         const x=(t.clientX-rect.left)*scaleX, y=(t.clientY-rect.top)*scaleY;
 
-        if (gameState === 'INIT') {
+if (gameState === 'INIT') {
+            requestFullScreen(); // ★ タッチ時に自動的に全画面化
             if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
             setGameState('TITLE');
             continue;
         }
-        if(gameState==='TITLE'&&isTitleAnimFinished){
+if(gameState==='TITLE'&&isTitleAnimFinished){
+            if(isPointInRect(x,y,getFullscreenButtonRect())){ toggleFullscreen(); continue; } // ★ 全画面ボタン判定
             if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
             else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
             else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
@@ -2156,6 +2167,15 @@ function draw() {
             ctx.fillStyle = '#000000'; ctx.font = `${Math.min(24, cr.bh * 0.44)}px GameFont, sans-serif`;
             ctx.fillText('クレジット', canvas.width / 2, cr.by + cr.bh * 0.65);
 
+            // ★ タイトル画面右上に「全画面」ボタンを描画
+            const fsr = getFullscreenButtonRect();
+            const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            ctx.fillStyle = '#dc8c39';
+            ctx.fillRect(fsr.bx, fsr.by, fsr.bw, fsr.bh);
+            ctx.fillStyle = '#000000';
+            ctx.font = `bold ${Math.min(18, fsr.bh * 0.48)}px GameFont, sans-serif`;
+            ctx.fillText(isFS ? '画面解除' : '全画面', fsr.bx + fsr.bw / 2, fsr.by + fsr.bh * 0.65);
+
             ctx.font = `${Math.min(15, canvas.height * 0.024)}px GameFont, sans-serif`; ctx.fillStyle = '#000';
             ctx.fillText('Enter / クリックでSTART・「遊び方」「クレジット」で詳細表示', canvas.width / 2, Math.min(canvas.height - 10, cr.by + cr.bh + 20));
             ctx.restore();
@@ -2889,6 +2909,31 @@ function loop(timestamp) {
 }
 
 requestAnimationFrame(loop);
+
+function requestFullScreen() {
+    const docEl = document.documentElement;
+    const request = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+    if (request) {
+        request.call(docEl).catch(err => {
+            console.log("Fullscreen request failed:", err);
+        });
+    }
+}
+
+function toggleFullscreen() {
+    const doc = document;
+    const docEl = doc.documentElement;
+
+    const request = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+    const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        if (request) request.call(docEl).catch(e => console.log(e));
+    } else {
+        if (exit) exit.call(doc).catch(e => console.log(e));
+    }
+}
+
 </script>
 </body>
 </html>
