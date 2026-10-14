@@ -227,10 +227,15 @@ function handleTouch(e){
     const rect=canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const joyX=Math.min(110,canvas.width*0.16),joyY=canvas.height-92;
-    const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
-    const jumpX=canvas.width-Math.min(88,canvas.width*0.13),jumpY=canvas.height-92;
-    const jumpR=Math.min(58,Math.max(44,canvas.width*0.065));
+    // 移動ジョイスティックのサイズ・位置を拡大（半径 0.075 → 0.11 へ拡大）
+    const joyX = Math.min(150, canvas.width * 0.18);
+    const joyY = canvas.height - 115;
+    const joyR = Math.min(105, Math.max(72, canvas.width * 0.11)); // ★ 移動スティックのみサイズ拡大
+
+    // JUMPボタン（サイズ維持）
+    const jumpX = canvas.width - Math.min(88, canvas.width * 0.13);
+    const jumpY = canvas.height - 92;
+    const jumpR = Math.min(58, Math.max(44, canvas.width * 0.065));
 
     for(let i=0;i<e.touches.length;i++){
         const t=e.touches[i];
@@ -275,20 +280,26 @@ if(gameState==='TITLE'&&isTitleAnimFinished){
         }
         if(gameState!=='PLAYING') continue;
         
-        const dx=x-joyX,dy=y-joyY,dist=Math.hypot(dx,dy);
-        if(x<canvas.width*0.48&&y>canvas.height*0.56&&dist<=joyR*1.65){
-            const c=Math.min(dist,joyR);
-            const nx=dist?dx/dist:0;
-            const ny=dist?dy/dist:0;
-            input.touch.moveX=Math.max(-1,Math.min(1,nx*c/joyR));
-            input.touch.moveY=Math.max(-1,Math.min(1,ny*c/joyR));
-
-            input.touch.left=input.touch.moveX<-0.20;
-            input.touch.right=input.touch.moveX>0.20;
-            input.touch.up=input.touch.moveY<-0.20;
-            input.touch.down=input.touch.moveY>0.20;
-        }else if(x>canvas.width*0.52&&y>canvas.height*0.56&&Math.hypot(x-jumpX,y-jumpY)<=jumpR*1.45){
-            input.touch.jump=true;
+        const dx = x - joyX, dy = y - joyY, dist = Math.hypot(dx, dy);
+        // タッチ判定領域を少し広げて誤操作を防止 (joyR * 2.2)
+        if (x < canvas.width * 0.48 && y > canvas.height * 0.45 && dist <= joyR * 2.2) {
+            if (dist > 8) { // デッドゾーン（誤作動防止）
+                const angle = Math.atan2(dy, dx); // 角度で方向判定
+                // 左右入力
+                if (Math.abs(dx) > 10) {
+                    input.touch.left = dx < 0;
+                    input.touch.right = dx > 0;
+                    input.touch.moveX = dx < 0 ? -1 : 1;
+                }
+                // 上下入力（無重力時用）
+                if (Math.abs(dy) > 10) {
+                    input.touch.up = dy < 0;
+                    input.touch.down = dy > 0;
+                    input.touch.moveY = dy < 0 ? -1 : 1;
+                }
+            }
+        } else if (x > canvas.width * 0.50 && y > canvas.height * 0.45 && Math.hypot(x - jumpX, y - jumpY) <= jumpR * 1.8) {
+            input.touch.jump = true;
         }
     }
 }
@@ -2521,15 +2532,46 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
         // 28pxフォントの描画ベースラインに合わせて、実描画領域のすぐ下に配置
         const textY = barHeight > 0 ? (barY + barHeight + 22) : 35;
         ctx.fillText(phaseText, 15, textY);
-        // iPad / スマホ：左スティックで移動、右ボタンでジャンプ
-        const joyX=Math.min(110,canvas.width*0.16), joyY=canvas.height-92;
-        const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
-        const jumpX=canvas.width-Math.min(88,canvas.width*0.13), jumpY=canvas.height-92;
-        const jumpR=Math.min(58,Math.max(44,canvas.width*0.065));
-        ctx.globalAlpha=0.38;ctx.fillStyle='#dc8c39';ctx.beginPath();ctx.arc(joyX,joyY,joyR,0,Math.PI*2);ctx.fill();
-        ctx.globalAlpha=0.65;ctx.beginPath();ctx.arc(joyX,joyY,joyR*0.38,0,Math.PI*2);ctx.fill();
-        ctx.globalAlpha=0.42;ctx.beginPath();ctx.arc(jumpX,jumpY,jumpR,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle='#000';ctx.textAlign='center';
-        ctx.font=`bold ${Math.min(26,canvas.width*0.05)}px GameFont, sans-serif`;ctx.fillText('移動',joyX,joyY+8);ctx.fillText('JUMP',jumpX,jumpY+8);
+        // iPad / スマホ：左スティック（拡大版）、右ボタンでジャンプ
+        const joyX = Math.min(150, canvas.width * 0.18);
+        const joyY = canvas.height - 115;
+        const joyR = Math.min(105, Math.max(72, canvas.width * 0.11)); // ★ 移動スティックのみサイズ拡大
+
+        const jumpX = canvas.width - Math.min(88, canvas.width * 0.13);
+        const jumpY = canvas.height - 92;
+        const jumpR = Math.min(58, Math.max(44, canvas.width * 0.065));
+        // コントローラー土台
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#dc8c39';
+        ctx.beginPath();
+        ctx.arc(joyX, joyY, joyR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 入力方向に応じたノブの移動計算
+        let knobX = joyX + (input.touch.moveX || 0) * (joyR * 0.5);
+        let knobY = joyY + (input.touch.moveY || 0) * (joyR * 0.5);
+
+        // 指で倒している方向にノブを動かして描画
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(knobX, knobY, joyR * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ジャンプボタン（タップ時に明るくなる）
+        ctx.globalAlpha = input.touch.jump ? 0.8 : 0.4;
+        ctx.fillStyle = input.touch.jump ? '#ffffff' : '#dc8c39';
+        ctx.beginPath();
+        ctx.arc(jumpX, jumpY, jumpR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 文字表記
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${Math.min(22, canvas.width * 0.04)}px GameFont, sans-serif`;
+        ctx.fillText('移動', joyX, joyY + 7);
+        ctx.fillText('JUMP', jumpX, jumpY + 7);
         if(tutorialActive){
             const tutorialTitles=[
                 '1 / 5 移動',
