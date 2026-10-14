@@ -4,14 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bulleta Bulleta </title>
-    <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; touch-action: none; }
-        canvas { 
+<style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            background-color: #000; 
+            touch-action: none; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+canvas { 
             display: block; 
-            margin: 0 auto; 
             background-color: #000; 
             image-rendering: pixelated; 
             image-rendering: crisp-edges;
+            /* 文字の勝手なアンチエイリアス（平滑化）を無効化 */
+            -webkit-font-smoothing: none;
+            -moz-osx-font-smoothing: unset;
+            font-smooth: never;
+            text-rendering: pixelated;
+            /* 16:9を維持したまま画面いっぱいに拡大する設定 */
+            width: 100vw;
+            height: calc(100vw * 9 / 16);
+            max-height: 100vh;
+            max-width: calc(100vh * 16 / 9);
         }
         @font-face {
             font-family: 'GameFont';
@@ -35,8 +55,9 @@ const GAME_VERSION = 'β-7';
 ctx.imageSmoothingEnabled = false;
 
 function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // ゲーム内部の描画解像度を1280x720(16:9)に固定
+    canvas.width = 1280;
+    canvas.height = 720;
     ctx.imageSmoothingEnabled = false;
 }
 window.addEventListener('resize', resize);
@@ -69,7 +90,7 @@ const ENEMY_CONFIGS = {
 };
 
 // === 入力処理 ===
-const TARGET_VISIBLE_PLATFORMS = 16;
+const TARGET_VISIBLE_PLATFORMS = 12;
 let debugMode = false;
 let gameSpeedMultiplier = 1;
 const input = { keys: {}, justPressed: {}, touch: { left: false, right: false, jump: false, moveX: 0, joystickActive: false } };
@@ -81,6 +102,12 @@ window.addEventListener('keydown', e => {
     }
     if (e.key === 'F4') {
         gameSpeedMultiplier = gameSpeedMultiplier === 1 ? 2 : 1;
+        e.preventDefault();
+        return;
+    }
+    // ステージ1, 2, 3のプレイ中にEscキーを押した時、一時停止を切り替え
+    if (e.key === 'Escape' && gameState === 'PLAYING' && [1, 2, 3].includes(stage)) {
+        isPaused = !isPaused;
         e.preventDefault();
         return;
     }
@@ -125,11 +152,35 @@ function getGameOverRestartButtonRect() {
     const bw = Math.min(360, canvas.width * 0.66), bh = Math.min(68, canvas.height * 0.10);
     return {bx:(canvas.width-bw)/2, by:canvas.height*0.61, bw, bh};
 }
+// 右上の一時停止ボタンの領域を取得 (幅50px, 高さ50px, 画面右上に配置)
+function getMenuButtonRect() {
+    const bw = 80, bh = 80;
+    return { bx: canvas.width - bw - 15, by: 15, bw, bh };
+}
 function isPointInRect(x,y,r){return x>=r.bx&&x<=r.bx+r.bw&&y>=r.by&&y<=r.by+r.bh;}
 
 canvas.addEventListener('click', e => {
     const r = canvas.getBoundingClientRect();
-    const x = e.clientX-r.left, y=e.clientY-r.top;
+    // 表示サイズから内部解像度(1280x720)への倍率を計算して座標を補正
+    const scaleX = canvas.width / r.width;
+    const scaleY = canvas.height / r.height;
+    const x = (e.clientX - r.left) * scaleX;
+    const y = (e.clientY - r.top) * scaleY;
+
+    // ステージ1〜3のプレイ中に右上のStart_Stopボタンが押された場合
+    if (gameState === 'PLAYING' && [1, 2, 3].includes(stage) && isPointInRect(x, y, getMenuButtonRect())) {
+        isPaused = !isPaused;
+        return;
+    }
+    // メニューが開いている時に画面中央（メニュー内）を押したらポーズ解除
+    if (gameState === 'PLAYING' && isPaused) {
+        const mw = Math.min(400, canvas.width * 0.8), mh = Math.min(300, canvas.height * 0.6);
+        const menuRect = { bx: (canvas.width - mw) / 2, by: (canvas.height - mh) / 2, bw: mw, bh: mh };
+        if (isPointInRect(x, y, menuRect)) {
+            isPaused = false;
+            return;
+        }
+    }
     
 if (gameState === 'INIT') {
         if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
@@ -165,14 +216,18 @@ function handleTouch(e){
     e.preventDefault();
     input.touch={left:false,right:false,up:false,down:false,jump:false,moveX:0,moveY:0,joystickActive:false};
     const rect=canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     const joyX=Math.min(110,canvas.width*0.16),joyY=canvas.height-92;
     const joyR=Math.min(70,Math.max(48,canvas.width*0.075));
     const jumpX=canvas.width-Math.min(88,canvas.width*0.13),jumpY=canvas.height-92;
     const jumpR=Math.min(58,Math.max(44,canvas.width*0.065));
-   for(let i=0;i<e.touches.length;i++){
-        const t=e.touches[i],x=t.clientX-rect.left,y=t.clientY-rect.top;
 
-if (gameState === 'INIT') {
+    for(let i=0;i<e.touches.length;i++){
+        const t=e.touches[i];
+        const x=(t.clientX-rect.left)*scaleX, y=(t.clientY-rect.top)*scaleY;
+
+        if (gameState === 'INIT') {
             if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
@@ -215,14 +270,12 @@ if (gameState === 'INIT') {
             const nx=dist?dx/dist:0;
             const ny=dist?dy/dist:0;
             input.touch.moveX=Math.max(-1,Math.min(1,nx*c/joyR));
-            input.touch.moveY=Math.max(-1,Math.min(1,ny*c/joyR)); // Y軸入力を追加
-            input.touch.joystickActive=true;
+            input.touch.moveY=Math.max(-1,Math.min(1,ny*c/joyR));
 
-            // 8方向判定
             input.touch.left=input.touch.moveX<-0.20;
             input.touch.right=input.touch.moveX>0.20;
-            input.touch.up=input.touch.moveY<-0.20;     // 上入力を追加
-            input.touch.down=input.touch.moveY>0.20;   // 下入力を追加
+            input.touch.up=input.touch.moveY<-0.20;
+            input.touch.down=input.touch.moveY>0.20;
         }else if(x>canvas.width*0.52&&y>canvas.height*0.56&&Math.hypot(x-jumpX,y-jumpY)<=jumpR*1.45){
             input.touch.jump=true;
         }
@@ -272,6 +325,8 @@ const imageSources = {
     bullets: 'bullets.png',
     platforms: 'platforms.png',
     hpBar: 'HP_Bar.png',
+    menuBtn: 'Start_Stop.png',
+    menuPopup: 'Menu.png',
     enemy1: 'enemy1.png',
     enemy2: 'enemy2.png',
     enemy3: 'enemy3.png',
@@ -284,7 +339,6 @@ const imageSources = {
     enemy10: 'enemy10.png',
     enemy11: 'enemy11.png'
 };
-
 let imagesLoaded = 0;
 const totalImages = Object.keys(imageSources).length;
 for (let key in imageSources) {
@@ -346,6 +400,7 @@ function drawSpriteFitScreen(img, cols, rows, index) {
 // === ゲーム状態 ===
 let gameState = 'INIT';
 let stage = 1;
+let isPaused = false;
 let frameCount = 0;
 const MAX_PLAYER_HP = 25;
 let hitCount = 0;
@@ -1415,7 +1470,10 @@ function update() {
         if (input.justPressed['Enter'] || input.justPressed[' ']) proceedToNextStage();
     } else if (gameState === 'GAMEOVER') {
         if (hitCount >= MAX_PLAYER_HP && (input.justPressed['Enter'] || input.justPressed[' '])) restartGame();
-    } else if (gameState === 'PLAYING') {
+} else if (gameState === 'PLAYING') {
+        // ポーズ中はゲーム内フレームを進めず処理をスキップ
+        if (isPaused) return;
+
         frameCount++;
         
 const touchMoveX=input.touch.moveX||0;
@@ -2221,13 +2279,34 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
         ctx.save();
         ctx.globalAlpha = easeOutCubic(uiFadeProgress);
         ctx.textAlign='center';
-        ctx.fillStyle='#dc8c39';ctx.font=`${Math.min(44,canvas.width*0.07)}px GameFont, sans-serif`;
-        ctx.fillText('チュートリアルを開始しますか？',canvas.width/2,canvas.height*0.26);
-        ctx.fillStyle='#fff';ctx.font=`${Math.min(20,canvas.width*0.035)}px GameFont, sans-serif`;
-        ctx.fillText('移動・ジャンプ・攻撃を実際に操作して学びます',canvas.width/2,canvas.height*0.32);
+
+        // タイトルテキスト
+        ctx.fillStyle='#dc8c39';
+        ctx.font=`bold ${Math.min(48,canvas.width*0.075)}px GameFont, sans-serif`;
+        ctx.fillText('チュートリアルを開始しますか？',canvas.width/2,canvas.height*0.24);
+
+        // 説明文（サイズを1.2倍程度に拡大＆bold指定）
+        ctx.fillStyle='#fff';
+        ctx.font=`bold ${Math.min(24,canvas.width*0.04)}px GameFont, sans-serif`;
+        ctx.fillText('移動・ジャンプ・攻撃を実際に操作して学びます',canvas.width/2,canvas.height*0.33);
+
+        // 選択ボタン
         const rs=getChoiceRects(), opts=['チュートリアルを開始','スキップしてステージ1へ'];
-        opts.forEach((label,i)=>{const r=rs[i];ctx.fillStyle=choiceSelection===i?'#dc8c39':'#555';ctx.fillRect(r.bx,r.by,r.bw,r.bh);ctx.fillStyle='#000';ctx.font=`${Math.min(25,r.bh*0.42)}px GameFont, sans-serif`;ctx.fillText((choiceSelection===i?'▶ ':'')+label,canvas.width/2,r.by+r.bh*0.62);});
-        ctx.fillStyle='#fff';ctx.font=`${Math.min(18,canvas.width*0.032)}px GameFont, sans-serif`;ctx.fillText('↑↓ / ←→で選択・Enterで決定',canvas.width/2,canvas.height*0.82);
+        opts.forEach((label,i)=>{
+            const r=rs[i];
+            ctx.fillStyle=choiceSelection===i?'#dc8c39':'#666';
+            ctx.fillRect(r.bx,r.by,r.bw,r.bh);
+            ctx.fillStyle='#000';
+            // ボタン内の文字サイズを拡大して太字化
+            ctx.font=`bold ${Math.min(28,r.bh*0.48)}px GameFont, sans-serif`;
+            ctx.fillText((choiceSelection===i?'▶ ':'')+label,canvas.width/2,r.by+r.bh*0.63);
+        });
+
+        // 画面最下部の操作案内テキスト（サイズを18px→24pxへ大幅繰り上げし、潰れを解消）
+        ctx.fillStyle='#fff';
+        ctx.font=`bold ${Math.min(24,canvas.width*0.038)}px GameFont, sans-serif`;
+        ctx.fillText('↑↓ / ←→で選択 ・ Enterで決定',canvas.width/2,canvas.height*0.84);
+
         ctx.restore();
     } else if (gameState === 'STAGE_CLEAR') {
         ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -2346,9 +2425,9 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
             drawRotatedSprite(images.bullets, bCfg.cols, bCfg.rows, frame, b.x, b.y, 36, 36, angle);
         });
 
-        // UI表示
+// UI表示（bold を追加してピクセル表示時の細り・カスレを防止）
         ctx.fillStyle = '#fff';
-        ctx.font = '28px GameFont, sans-serif';
+        ctx.font = 'bold 28px GameFont, sans-serif';
         ctx.textAlign = 'left';
 
         // 1. HPバー描画（上下の透明余白を完全カットして最上部・文字に密着）
@@ -2430,18 +2509,18 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
         ctx.globalAlpha=0.38;ctx.fillStyle='#dc8c39';ctx.beginPath();ctx.arc(joyX,joyY,joyR,0,Math.PI*2);ctx.fill();
         ctx.globalAlpha=0.65;ctx.beginPath();ctx.arc(joyX,joyY,joyR*0.38,0,Math.PI*2);ctx.fill();
         ctx.globalAlpha=0.42;ctx.beginPath();ctx.arc(jumpX,jumpY,jumpR,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.fillStyle='#000';ctx.textAlign='center';
-        ctx.font=`${Math.min(26,canvas.width*0.05)}px GameFont, sans-serif`;ctx.fillText('移動',joyX,joyY+8);ctx.fillText('JUMP',jumpX,jumpY+8);
+        ctx.font=`bold ${Math.min(26,canvas.width*0.05)}px GameFont, sans-serif`;ctx.fillText('移動',joyX,joyY+8);ctx.fillText('JUMP',jumpX,jumpY+8);
         if(tutorialActive){
             const tutorialTitles=[
-                '1 / 5　移動',
-                '2 / 5　ジャンプ',
-                '3 / 5　自動攻撃',
-                '4 / 5　弾幕を避ける',
-                '5 / 5　実戦練習'
+                '1 / 5 移動',
+                '2 / 5 ジャンプ',
+                '3 / 5 自動攻撃',
+                '4 / 5 弾幕を避ける',
+                '5 / 5 実戦練習'
             ];
             const tutorialBodies=[
-                'PC：A / D または ← / →　　スマホ・iPad：左のスティック',
-                'PC：W / ↑　　スマホ・iPad：右の JUMP ボタン',
+                'PC：A / D または ← / →  スマホ・iPad：左のスティック',
+                'PC：W / ↑  スマホ・iPad：右の JUMP ボタン',
                 '攻撃は自動です。敵の前まで進んで倒そう',
                 '弾は移動して避けます。4秒間、動き続けてみよう',
                 '最後の敵を倒せば基本操作チュートリアル完了！'
@@ -2461,22 +2540,22 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
             ctx.fillRect(panelX,panelY,panelW,panelH);
             ctx.textAlign='center';
             ctx.fillStyle='#dc8c39';
-            ctx.font=`${Math.min(30,canvas.width*0.052)}px GameFont, sans-serif`;
-            ctx.fillText('チュートリアル　'+(tutorialTitles[tutorialStep]||''),canvas.width/2,panelY+34);
+            ctx.font=`bold ${Math.min(30,canvas.width*0.052)}px GameFont, sans-serif`;
+            ctx.fillText('チュートリアル '+(tutorialTitles[tutorialStep]||''),canvas.width/2,panelY+34);
 
             const barX=panelX+28, barY=panelY+50, barW=panelW-56, barH=10;
             ctx.fillStyle='#333'; ctx.fillRect(barX,barY,barW,barH);
             ctx.fillStyle='#dc8c39'; ctx.fillRect(barX,barY,barW*((tutorialStep+1)/5),barH);
 
             ctx.fillStyle='#fff';
-            ctx.font=`${Math.min(20,canvas.width*0.032)}px GameFont, sans-serif`;
+            ctx.font=`bold ${Math.min(20,canvas.width*0.032)}px GameFont, sans-serif`;
             ctx.fillText(tutorialBodies[tutorialStep]||'',canvas.width/2,panelY+94);
             ctx.fillStyle='#ffff00';
-            ctx.font=`${Math.min(18,canvas.width*0.029)}px GameFont, sans-serif`;
+            ctx.font=`bold ${Math.min(18,canvas.width*0.029)}px GameFont, sans-serif`;
             ctx.fillText(tutorialHints[tutorialStep]||'',canvas.width/2,panelY+127);
 
             ctx.fillStyle='#ddd';
-            ctx.font=`${Math.min(16,canvas.width*0.026)}px GameFont, sans-serif`;
+            ctx.font=`bold ${Math.min(16,canvas.width*0.026)}px GameFont, sans-serif`;
             if(tutorialStep===0) ctx.fillText('右へ移動すると自動で次へ進みます',canvas.width/2,panelY+158);
             else if(tutorialStep===1) ctx.fillText('ジャンプして着地するまで次へ進みません',canvas.width/2,panelY+158);
             else if(tutorialStep===2) ctx.fillText('敵を倒すまで操作を続けよう',canvas.width/2,panelY+158);
@@ -2484,16 +2563,56 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
             else ctx.fillText('ここまでできたら、いよいよ本番です',canvas.width/2,panelY+158);
 
             ctx.fillStyle='#aaa';
-            ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
-            ctx.fillText('チュートリアル中は被弾しません　／　スキップ不可',canvas.width/2,panelY+184);
+            ctx.font=`bold ${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
+            ctx.fillText('チュートリアル中は被弾しません ／スキップ不可',canvas.width/2,panelY+184);
         }
 
-        ctx.save();
+ctx.save();
         ctx.textAlign = 'right';
         ctx.fillStyle = 'rgba(255,255,255,0.65)';
-        ctx.font = '14px GameFont, sans-serif';
+        /* 14px → 18px へ変更し bold を指定 */
+        ctx.font = 'bold 18px GameFont, sans-serif';
         ctx.fillText(GAME_VERSION, canvas.width - 14, 24);
         ctx.restore();
+        // --- ステージ1,2,3の時のみ右上に Start_Stop ボタンを描画 ---
+        if ([1, 2, 3].includes(stage)) {
+            const btnR = getMenuButtonRect();
+            const btnImg = images.menuBtn;
+            if (btnImg && btnImg.complete && btnImg.naturalWidth > 0) {
+                // 通常時(1コマ目:再生/一時停止アイコン) と ポーズ時(2コマ目) で表示を切替
+                const btnFrame = isPaused ? 1 : 2; 
+                drawSprite(btnImg, 1, 2, btnFrame, btnR.bx, btnR.by, btnR.bw, btnR.bh);
+            }
+        }
+
+        // --- ポーズ中の Menu ポップアップ表示 ---
+        if (isPaused) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // 背景を暗くする
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const popupImg = images.menuPopup;
+            const mw = Math.min(400, canvas.width * 0.8);
+            const mh = Math.min(300, canvas.height * 0.6);
+            const mx = (canvas.width - mw) / 2;
+            const my = (canvas.height - mh) / 2;
+
+            if (popupImg && popupImg.complete && popupImg.naturalWidth > 0) {
+                ctx.drawImage(popupImg, mx, my, mw, mh);
+            } else {
+                ctx.fillStyle = '#333';
+                ctx.fillRect(mx, my, mw, mh);
+            }
+
+            // MENU文字の表示
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '36px GameFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSE', canvas.width / 2, my + mh * 0.4);
+            ctx.font = '18px GameFont, sans-serif';
+            ctx.fillText('タップまたはクリックで再開', canvas.width / 2, my + mh * 0.7);
+            ctx.restore();
+        }
 
 drawGravityTransitionEffect();
         drawStageTransitionEffect();
@@ -2675,13 +2794,12 @@ function setupPlatforms() {
     platformSequenceIndex = 0;
     platforms = [];
 
-    // 現在の千鳥配置を「4段 × 4個」に拡張し、合計16個を初期配置する。
-    // 各段を左右にずらして、画像のような千鳥状のリズムを維持する。
-    const rowY = [0.12, 0.34, 0.56, 0.78];
+    // 上から3段（合計12個）のみ配置し、一番下の段（0.78）を削除
+    const rowY = [0.12, 0.34, 0.56];
     const baseX = [0.02, 0.26, 0.50, 0.74];
     const stagger = w * 0.12;
 
-    for (let row = 0; row < 4; row++) {
+    for (let row = 0; row < 3; row++) { // 4 から 3 に変更
         const y = Math.max(24, Math.min(h - cellH - 54, h * rowY[row]));
         const rowOffset = (row % 2 === 0) ? 0 : stagger;
 
