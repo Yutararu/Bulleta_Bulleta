@@ -179,14 +179,31 @@ canvas.addEventListener('click', e => {
         isPaused = !isPaused;
         return;
     }
-    // メニューが開いている時に画面中央（メニュー内）を押したらポーズ解除
+   // ポーズ画面中の各ボタンクリック処理（拡大版に対応）
     if (gameState === 'PLAYING' && isPaused) {
-        const mw = Math.min(400, canvas.width * 0.8), mh = Math.min(300, canvas.height * 0.6);
-        const menuRect = { bx: (canvas.width - mw) / 2, by: (canvas.height - mh) / 2, bw: mw, bh: mh };
-        if (isPointInRect(x, y, menuRect)) {
+        const mw = Math.min(520, canvas.width * 0.85);
+        const mh = Math.min(420, canvas.height * 0.75);
+        const mx = (canvas.width - mw) / 2;
+        const my = (canvas.height - mh) / 2;
+
+        const bw = Math.min(360, mw * 0.8);
+        const bh = 55;
+        const bx = (canvas.width - bw) / 2;
+
+        const btnResume  = { bx, by: my + 120, bw, bh };
+        const btnRestart = { bx, by: my + 200, bw, bh };
+        const btnTitle   = { bx, by: my + 280, bw, bh };
+
+        if (isPointInRect(x, y, btnResume)) {
             isPaused = false;
-            return;
+        } else if (isPointInRect(x, y, btnRestart)) {
+            isPaused = false;
+            restartGame();
+        } else if (isPointInRect(x, y, btnTitle)) {
+            isPaused = false;
+            setGameState('TITLE');
         }
+        return;
     }
     
 if (gameState === 'INIT') {
@@ -211,7 +228,7 @@ if (gameState === 'INIT') {
         const rs=getChoiceRects();
         if(isPointInRect(x,y,rs[0])) beginTutorial();
         else if(isPointInRect(x,y,rs[1])) beginStageWithoutTutorial();
-    }else if(gameState==='STAGE_CLEAR'){
+   }else if(gameState==='STAGE_CLEAR'){
         if(isPointInRect(x,y,getStageClearButtonRect())) proceedToNextStage();
     }else if(gameState==='GAMEOVER' && hitCount >= MAX_PLAYER_HP){
         if(isPointInRect(x,y,getGameOverRestartButtonRect())) restartGame();
@@ -798,8 +815,6 @@ function createEnemy(id, isBoss, startX, startY) {
 
 // === 弾幕生成処理 ===
 function spawnEnemyBullets(enemy) {
-    // キャラクターごとに弾の色（行）と攻撃タイプを固定。
-    // 雑魚は避けやすく、中ボス・ボスは明確に難しくなるように調整。
     const ATTACK_PROFILE = {
         1:  { row: 1, type: 'target', speed: 1.9 },
         2:  { row: 2, type: 'ring',   speed: 1.45 },
@@ -815,6 +830,8 @@ function spawnEnemyBullets(enemy) {
     };
 
     const profile = { ...(ATTACK_PROFILE[enemy.id] || ATTACK_PROFILE[1]) };
+
+let diffCountMult = 1.0;
     const isLeaderBar = stage === 1 && enemy.id === 9;
     const ZAKO_ATTACK_COOLDOWN = 90; // 約1.5秒。リードバーだけは例外。
     if (enemy.role === 'zako' && !isLeaderBar && enemy.attackCooldown > 0) return;
@@ -846,6 +863,7 @@ function spawnEnemyBullets(enemy) {
     }
 
     function fireRing(count = 8, speed = 2.5) {
+        count = Math.max(3, Math.round(count * diffCountMult)); // 難易度による弾数補正
         let f = (profile.row - 1) * 4 + 2;
         for (let i = 0; i < count; i++) {
             let a = (Math.PI * 2 / count) * i;
@@ -859,9 +877,10 @@ function spawnEnemyBullets(enemy) {
     }
 
     function fireFan(count = 5, spread = 0.5, speed = 3.5) {
+        count = Math.max(2, Math.round(count * diffCountMult)); // 難易度による弾数補正
         let f = (profile.row - 1) * 4 + 1;
         for (let i = 0; i < count; i++) {
-            let a = targetAngle - (spread / 2) + (spread / (count - 1)) * i;
+            let a = targetAngle - (spread / 2) + (spread / Math.max(1, count - 1)) * i;
             enemyBullets.push({ x: ex, y: ey, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, frame: f });
         }
     }
@@ -1488,7 +1507,7 @@ function update() {
         if (input.justPressed['ArrowUp'] || input.justPressed['ArrowLeft']) choiceSelection = 0;
         if (input.justPressed['ArrowDown'] || input.justPressed['ArrowRight']) choiceSelection = 1;
         if (input.justPressed['Enter'] || input.justPressed[' ']) { if (choiceSelection === 0) beginTutorial(); else beginStageWithoutTutorial(); }
-    } else if (gameState === 'STAGE_CLEAR') {
+} else if (gameState === 'STAGE_CLEAR') {
         if (input.justPressed['Enter'] || input.justPressed[' ']) proceedToNextStage();
     } else if (gameState === 'GAMEOVER') {
         if (hitCount >= MAX_PLAYER_HP && (input.justPressed['Enter'] || input.justPressed[' '])) restartGame();
@@ -1700,7 +1719,8 @@ if (zeroGravityCombat) {
                     playerInvincibleUntil=0;
                     playerBullets=[];
                     enemyBullets=[];
-                    startStage(1);
+                    difficultySelection = 1;
+                    setGameState('DIFFICULTY_CHOICE');
                 }
             }
         }
@@ -2647,35 +2667,54 @@ ctx.save();
             }
         }
 
-        // --- ポーズ中の Menu ポップアップ表示 ---
+       // --- ポーズ中の Menu ポップアップ表示 ---
         if (isPaused) {
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // 背景を暗くする
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const popupImg = images.menuPopup;
-            const mw = Math.min(400, canvas.width * 0.8);
-            const mh = Math.min(300, canvas.height * 0.6);
+            // 枠のサイズを 520x420 に拡大
+            const mw = Math.min(520, canvas.width * 0.85);
+            const mh = Math.min(420, canvas.height * 0.75);
             const mx = (canvas.width - mw) / 2;
             const my = (canvas.height - mh) / 2;
 
             if (popupImg && popupImg.complete && popupImg.naturalWidth > 0) {
                 ctx.drawImage(popupImg, mx, my, mw, mh);
             } else {
-                ctx.fillStyle = '#333';
+                ctx.fillStyle = '#222222';
                 ctx.fillRect(mx, my, mw, mh);
             }
 
-            // MENU文字の表示
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '36px GameFont, sans-serif';
+            // タイトル「PAUSE」（枠内の上部に余裕を持って配置）
+            ctx.fillStyle = '#dc8c39';
+            ctx.font = 'bold 42px GameFont, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('PAUSE', canvas.width / 2, my + mh * 0.4);
-            ctx.font = '18px GameFont, sans-serif';
-            ctx.fillText('タップまたはクリックで再開', canvas.width / 2, my + mh * 0.7);
+            ctx.fillText('PAUSE', canvas.width / 2, my + 75);
+
+            // ボタンの描画（ゆったりとした配置）
+            const bw = Math.min(360, mw * 0.8);
+            const bh = 55;
+            const bx = (canvas.width - bw) / 2;
+
+            const buttons = [
+                { label: 'ゲームに戻る', by: my + 120, color: '#dc8c39' },
+                { label: '最初からやり直す', by: my + 200, color: '#ffffff' },
+                { label: 'タイトルへ戻る', by: my + 280, color: '#ffffff' }
+            ];
+
+            buttons.forEach(btn => {
+                ctx.fillStyle = btn.color;
+                ctx.fillRect(bx, btn.by, bw, bh);
+
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 24px GameFont, sans-serif';
+                ctx.fillText(btn.label, canvas.width / 2, btn.by + bh * 0.65);
+            });
+
             ctx.restore();
         }
-
 drawGravityTransitionEffect();
         drawStageTransitionEffect();
         drawDebugOverlay();
@@ -2700,7 +2739,7 @@ drawGravityTransitionEffect();
             ctx.restore();
         }
 
-    } else if (gameState === 'GAMEOVER') {
+} else if (gameState === 'GAMEOVER') {
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.save();
@@ -2708,7 +2747,9 @@ drawGravityTransitionEffect();
         ctx.fillStyle = '#dc8c39';
         ctx.font = '50px GameFont, sans-serif';
         ctx.textAlign = 'center';
+
         if (hitCount >= MAX_PLAYER_HP) {
+            // ゲームオーバー時
             ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 42);
             const restartRect = getGameOverRestartButtonRect();
             ctx.fillStyle = '#dc8c39';
@@ -2719,11 +2760,25 @@ drawGravityTransitionEffect();
             ctx.fillStyle = '#fff';
             ctx.font = `${Math.min(18, canvas.width * 0.032)}px GameFont, sans-serif`;
             ctx.fillText('Enter / クリックでリスタート', canvas.width/2, restartRect.by + restartRect.bh + 30);
-} else {
-            ctx.fillText('CLEAR', canvas.width/2, canvas.height/2 - 60);
+        } else {
+            // ステージ3（全クリア）時
+            ctx.fillText('ALL CLEAR!', canvas.width/2, canvas.height/2 - 110);
+            
             ctx.font = '26px GameFont, sans-serif';
-            ctx.fillText(`TIME  ${Math.floor(clearTimeMs / 60000)}:${String(Math.floor(clearTimeMs / 1000) % 60).padStart(2,'0')}`, canvas.width/2, canvas.height/2);
-            ctx.fillText(`被弾数  ${totalHitCount}`, canvas.width/2, canvas.height/2 + 48); 
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`TIME  ${Math.floor(clearTimeMs / 60000)}:${String(Math.floor(clearTimeMs / 1000) % 60).padStart(2,'0')}`, canvas.width/2, canvas.height/2 - 40);
+            ctx.fillText(`総被弾数  ${totalHitCount}`, canvas.width/2, canvas.height/2 + 10);
+            
+            // 評価ランクの表示（黄色で強調）
+            const rank = getRank(totalHitCount);
+            ctx.fillStyle = '#ffff00';
+            ctx.font = 'bold 36px GameFont, sans-serif';
+            ctx.fillText(`最終評価 : ${rank}`, canvas.width/2, canvas.height/2 + 75);
+
+            // 操作案内
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '18px GameFont, sans-serif';
+            ctx.fillText('Enter / クリックでリスタート', canvas.width/2, canvas.height/2 + 135);
         }
         ctx.restore();
     }
@@ -2906,12 +2961,25 @@ function restartGame(){
     startStage(1);
     setGameState('PLAYING');
 }
+function getRank(hits) {
+    if (hits === 0) return 'SSS+';
+    if (hits <= 5) return 'SSS';
+    if (hits <= 10) return 'SS';
+    if (hits <= 20) return 'S';
+    if (hits <= 30) return 'A';
+    if (hits <= 40) return 'B';
+    if (hits <= 50) return 'C';
+    if (hits <= 60) return 'D';
+    if (hits <= 72) return 'E';
+    return 'E'; // 73以上もE
+}
 function beginTutorial(){resetRun();setGameState('PLAYING');tutorialActive=true;tutorialComplete=false;tutorialStep=0;tutorialStartX=player.x;tutorialJumpSeen=false;tutorialJumpLanded=false;tutorialAttackStarted=false;tutorialPlatformLandCount=0;tutorialWasOnAirPlatform=false;tutorialDodgeStartFrame=0;tutorialFinalEnemyStarted=false;playerInvincibleUntil=Infinity;enemies=[];playerBullets=[];enemyBullets=[];waveState='TUTORIAL_MOVE';}
 function beginStageWithoutTutorial() {
     resetRun();
-    tutorialActive = false; tutorialComplete = true;
-    setGameState('PLAYING');
+    tutorialActive = false;
+    tutorialComplete = true;
     startStage(1);
+    setGameState('PLAYING');
 }
 function startGame(){setGameState('TUTORIAL_CHOICE');choiceSelection=0;}
 function proceedToNextStage(){if(stage<3){const nextStage=stage+1;stageTransitionStage=nextStage;stageTransitionTimer=STAGE_TRANSITION_FRAMES;startStage(nextStage);setGameState('PLAYING');}else{gameResult='CLEAR';clearTimeMs=performance.now()-gameStartTime;setGameState('GAMEOVER');}}
