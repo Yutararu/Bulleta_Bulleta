@@ -1537,14 +1537,14 @@ let moveDown = input.keys['s'] || input.keys['S'] || input.keys['ArrowDown'] || 
         let currentSpeed = player.speed;
 
 if (zeroGravityCombat) {
-    // X軸移動
+    // X軸移動入力
     if (touchMoveX < -0.20){player.vx=touchMoveX*currentSpeed;player.dir=-1;}
     else if (touchMoveX > 0.20){player.vx=touchMoveX*currentSpeed;player.dir=1;}
     else if(moveLeft&&!moveRight){player.vx=-currentSpeed;player.dir=-1;}
     else if(moveRight&&!moveLeft){player.vx=currentSpeed;player.dir=1;}
     else {player.vx=0;}
 
-    // Y軸移動（タッチの analogue 的な傾きにも対応）
+    // Y軸移動入力
     if (Math.abs(touchMoveY) > 0.20) {
         player.vy = touchMoveY * currentSpeed;
     } else {
@@ -1552,18 +1552,60 @@ if (zeroGravityCombat) {
         player.vy = verticalInput * currentSpeed;
     }
     player.isJumping = false;
+    player.dir = 1; // 無重力時は右向き固定
 
-            const verticalInput = (moveDown ? 1 : 0) - (moveUp ? 1 : 0);
-            player.vy = verticalInput * currentSpeed;
-            player.isJumping = false;
+    // 1. X軸移動 ＆ 足場との当たり判定
+    player.x += player.vx;
+    platforms.forEach(p => {
+        const platformRect = platformActiveRect(p);
+        const playerRect = getPlayerPlatformCollisionRect();
+        if (
+            playerRect.x < platformRect.x + platformRect.w &&
+            playerRect.x + playerRect.w > platformRect.x &&
+            playerRect.y < platformRect.y + platformRect.h &&
+            playerRect.y + playerRect.h > platformRect.y
+        ) {
+            const playerCenterX = playerRect.x + playerRect.w / 2;
+            const platformCenterX = platformRect.x + platformRect.w / 2;
 
-            player.x += player.vx;
-            player.y += player.vy;
-            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
-            // 無重力の中ボス・ボス戦では自機を常に右向きに固定。
-            player.dir = 1;
-        } else {
+            if (playerCenterX < platformCenterX) {
+                // 自機が足場の左側にいる場合（壁として右進をブロック）
+                player.x = platformRect.x - (playerRect.x - player.x) - playerRect.w;
+                player.vx = 0;
+            } else {
+                // 自機が足場の右側にいる場合（流れてきた足場に押されて一緒に左へ動く）
+                player.x = platformRect.x + platformRect.w - (playerRect.x - player.x);
+                player.x -= MAP_SCROLL_SPEED;
+                player.vx = 0;
+            }
+        }
+    });
+
+    // 2. Y軸移動 ＆ 足場との当たり判定
+    player.y += player.vy;
+    platforms.forEach(p => {
+        const platformRect = platformActiveRect(p);
+        const playerRect = getPlayerPlatformCollisionRect();
+        if (
+            playerRect.x < platformRect.x + platformRect.w &&
+            playerRect.x + playerRect.w > platformRect.x &&
+            playerRect.y < platformRect.y + platformRect.h &&
+            playerRect.y + playerRect.h > platformRect.y
+        ) {
+            if (player.vy > 0) {
+                player.y = platformRect.y - (playerRect.y - player.y) - playerRect.h;
+                player.vy = 0;
+            } else if (player.vy < 0) {
+                player.y = platformRect.y + platformRect.h - (playerRect.y - player.y);
+                player.vy = 0;
+            }
+        }
+    });
+
+    // 画面端判定
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
+} else {
             if(touchMoveX < -0.20){player.vx=touchMoveX*currentSpeed;player.dir=-1;}
             else if(touchMoveX > 0.20){player.vx=touchMoveX*currentSpeed;player.dir=1;}
             else if(moveLeft&&!moveRight){player.vx=-currentSpeed;player.dir=-1;}
@@ -1586,11 +1628,11 @@ if (zeroGravityCombat) {
             }
 
 // 1. まず X軸方向に移動させて衝突判定（横壁でピタッと止める）
+           // 1. X軸移動 ＆ 衝突判定
             player.x += player.vx;
             platforms.forEach(p => {
                 const platformRect = platformActiveRect(p);
                 const playerRect = getPlayerPlatformCollisionRect();
-
                 if (
                     playerRect.x < platformRect.x + platformRect.w &&
                     playerRect.x + playerRect.w > platformRect.x &&
@@ -1598,22 +1640,19 @@ if (zeroGravityCombat) {
                     playerRect.y + playerRect.h > platformRect.y
                 ) {
                     if (player.vx > 0) {
-                        // 右移動中：足場の左側に固定
                         player.x = platformRect.x - (playerRect.x - player.x) - playerRect.w;
                     } else if (player.vx < 0) {
-                        // 左移動中：足場の右側に固定
                         player.x = platformRect.x + platformRect.w - (playerRect.x - player.x);
                     }
                     player.vx = 0;
                 }
             });
 
-            // 2. 次に Y軸方向に移動させて衝突判定（床・天井）
+            // 2. Y軸移動 ＆ 衝突判定
             player.y += player.vy;
             platforms.forEach(p => {
                 const platformRect = platformActiveRect(p);
                 const playerRect = getPlayerPlatformCollisionRect();
-
                 if (
                     playerRect.x < platformRect.x + platformRect.w &&
                     playerRect.x + playerRect.w > platformRect.x &&
@@ -1621,12 +1660,10 @@ if (zeroGravityCombat) {
                     playerRect.y + playerRect.h > platformRect.y
                 ) {
                     if (player.vy > 0) {
-                        // 落下中：足場の上にすっぽり着地
                         player.y = platformRect.y - (playerRect.y - player.y) - playerRect.h;
                         player.vy = 0;
                         player.isJumping = false;
                     } else if (player.vy < 0) {
-                        // 上昇中：天井にヒット
                         player.y = platformRect.y + platformRect.h - (playerRect.y - player.y);
                         player.vy = 0;
                     }
@@ -1635,7 +1672,6 @@ if (zeroGravityCombat) {
 
             // 画面端判定
             player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
-            // 道路中央にある白い点線（背景画像の高さ64px中、y=56px付近）を地面の基準線にする。
             const groundLineY = canvas.height * (56 / 64);
             const groundY = groundLineY - player.h;
             if (player.y >= groundY) {
@@ -1755,82 +1791,6 @@ if (zeroGravityCombat) {
                 }
             });
 
-            // 足場の実寸矩形を、そのまま1つの当たり判定として使用。
-            // 重力時は「床」、無重力時は「障害物」として同じ矩形判定を維持する。
-            const previousPlayerX = player.x - player.vx;
-            const previousPlayerY = player.y - player.vy;
-
-            platforms.forEach(p => {
-                const platformRect = platformActiveRect(p);
-                const playerCollisionRect = getPlayerPlatformCollisionRect();
-                const previousCollisionRect = getPlayerPlatformCollisionRect(previousPlayerX, previousPlayerY);
-                const playerLeft = playerCollisionRect.x;
-                const playerRight = playerCollisionRect.x + playerCollisionRect.w;
-                const playerTop = playerCollisionRect.y;
-                const playerBottom = playerCollisionRect.y + playerCollisionRect.h;
-                const previousLeft = previousCollisionRect.x;
-                const previousRight = previousCollisionRect.x + previousCollisionRect.w;
-                const previousTop = previousCollisionRect.y;
-                const previousBottom = previousCollisionRect.y + previousCollisionRect.h;
-
-                const overlaps =
-                    playerRight > platformRect.x &&
-                    playerLeft < platformRect.x + platformRect.w &&
-                    playerBottom > platformRect.y &&
-                    playerTop < platformRect.y + platformRect.h;
-
-                if (!overlaps) return;
-
-                // 移動方向を優先して衝突面を決定する。
-                // 無重力中もここを通るため、足場はそのまま障害物になる。
-                if (player.vy > 0 && previousBottom <= platformRect.y) {
-                    player.y = platformRect.y - player.h;
-                    player.vy = 0;
-                    player.isJumping = false;
-                    return;
-                }
-
-                if (player.vy < 0 && previousTop >= platformRect.y + platformRect.h) {
-                    player.y = platformRect.y + platformRect.h;
-                    player.vy = 0;
-                    return;
-                }
-
-                if (player.vx > 0 && previousRight <= platformRect.x) {
-                    player.x = platformRect.x - player.w;
-                    player.vx = 0;
-                    return;
-                }
-
-                if (player.vx < 0 && previousLeft >= platformRect.x + platformRect.w) {
-                    player.x = platformRect.x + platformRect.w;
-                    player.vx = 0;
-                    return;
-                }
-
-                // フレーム間で大きくめり込んだ場合の保険。
-                // 最も浅い方向へ押し戻して、足場内部に残らないようにする。
-                const pushLeft = playerRight - platformRect.x;
-                const pushRight = platformRect.x + platformRect.w - playerLeft;
-                const pushTop = playerBottom - platformRect.y;
-                const pushBottom = platformRect.y + platformRect.h - playerTop;
-                const minPush = Math.min(pushLeft, pushRight, pushTop, pushBottom);
-
-                if (minPush === pushTop) {
-                    player.y = platformRect.y - player.h;
-                    player.vy = 0;
-                    player.isJumping = false;
-                } else if (minPush === pushBottom) {
-                    player.y = platformRect.y + platformRect.h;
-                    player.vy = 0;
-                } else if (minPush === pushLeft) {
-                    player.x = platformRect.x - player.w;
-                    player.vx = 0;
-                } else {
-                    player.x = platformRect.x + platformRect.w;
-                    player.vx = 0;
-                }
-            });
         }
 
         // プレイヤーアニメ
