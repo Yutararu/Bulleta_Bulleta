@@ -517,6 +517,18 @@ function getZeroGravityCombatState() {
 }
 
 function updateGravityState() {
+    // ステージ演出表示中の処理
+    if (stageTransitionTimer > 0) {
+        stageTransitionTimer--;
+        // 演出が終了した瞬間（カウントが0になった時）に敵をスポーン
+        if (stageTransitionTimer === 0 && pendingStageSpawn) {
+            pendingStageSpawn = false;
+            if (stage === 1) spawnStage1Zako1();
+            else if (stage === 2) spawnStage2Zako1();
+            else if (stage === 3) spawnStage3Zako1();
+        }
+        return;
+    }
     const nextGravityState = getZeroGravityCombatState();
     if (nextGravityState !== zeroGravityActive) {
         zeroGravityActive = nextGravityState;
@@ -531,7 +543,6 @@ function updateGravityState() {
         }
     }
     if (gravityTransitionTimer > 0) gravityTransitionTimer--;
-    if (stageTransitionTimer > 0) stageTransitionTimer--;
 }
 
 // 画面内UIのフェードイン。
@@ -578,30 +589,27 @@ function easeOutCubic(t) {
 }
 
 // === ステージ進行管理 ===
+// スポーン待機用フラグ変数を追加（広域変数定義エリア、または startStage の直前付近に定義）
+let pendingStageSpawn = false;
+
 function startStage(stg) {
     stage = stg;
+    stageTransitionStage = stg;
+    stageTransitionTimer = STAGE_TRANSITION_FRAMES;
+    pendingStageSpawn = true; // 演出終了後にスポーンさせるフラグ
+
     platforms.forEach(p => p.type = stage);
-    // ステージ開始時はプレイヤーのHPを全回復する（通算被弾数は保持）
     hitCount = 0;
-    enemies = [];
+    enemies = []; // 敵配列をクリア（ここでは生成しない）
     playerBullets = [];
     enemyBullets = [];
     stageStartFrame = frameCount;
     stage1PhaseIndex = 0;
 
-    // ★ ここにBGM切り替え処理を追加
     if (stage === 1 || stage === 2) {
-        playBGM('stage1_2'); // Deckrail.mp3
+        playBGM('stage1_2');
     } else if (stage === 3) {
-        playBGM('stage3');   // Existential_Depth.mp3
-    }
-
-    if (stage === 1) {
-        spawnStage1Zako1();
-    } else if (stage === 2) {
-        spawnStage2Zako1();
-    } else {
-        spawnStage3Zako1();
+        playBGM('stage3');
     }
 }
 function safeEnemyY(requestedY, enemyH) {
@@ -1904,7 +1912,7 @@ if (zeroGravityCombat) {
         enemies = enemies.filter(e => e.hp > 0 && !e.hasRetreated);
 
         // ステージ進行制御
-        if (enemies.length === 0) {
+        if (enemies.length === 0 && stageTransitionTimer <= 0) {
             playerBullets = [];
             enemyBullets = [];
 
@@ -2103,15 +2111,21 @@ function drawStageTransitionEffect() {
     if (stageTransitionTimer <= 0) return;
     const progress = 1 - stageTransitionTimer / STAGE_TRANSITION_FRAMES;
     const alpha = Math.sin(Math.PI * progress);
+    
     ctx.save();
+    // 暗転背景で文字を見やすく
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.65})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#dc8c39';
-    ctx.font = `${Math.min(72, canvas.width * 0.11)}px GameFont, sans-serif`;
-    ctx.fillText(`STAGE ${stageTransitionStage}`, canvas.width / 2, canvas.height * 0.43);
-    ctx.fillStyle = '#fff';
-    ctx.font = `${Math.min(22, canvas.width * 0.035)}px GameFont, sans-serif`;
-    ctx.fillText('NEXT AREA', canvas.width / 2, canvas.height * 0.50);
+    ctx.font = `bold ${Math.min(78, canvas.width * 0.12)}px GameFont, sans-serif`;
+    ctx.fillText(`STAGE ${stageTransitionStage}`, canvas.width / 2, canvas.height * 0.44);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.min(26, canvas.width * 0.04)}px GameFont, sans-serif`;
+    ctx.fillText('READY GO!', canvas.width / 2, canvas.height * 0.54);
     ctx.restore();
 }
 
@@ -2526,21 +2540,21 @@ ctx.font=`${Math.min(15,canvas.width*0.024)}px GameFont, sans-serif`;
 
         // 2. ステージ名の取得
         const labels = {
-            'STAGE1_ZAKO1': 'Stage 1 雑魚戦1',
-            'STAGE1_ZAKO2': 'Stage 1 雑魚戦2',
-            'STAGE1_MIDBOSS': 'Stage 1 中ボス 【HIGH】',
-            'STAGE1_ZAKO3': 'Stage 1 雑魚戦3',
-            'STAGE1_BOSS': 'Stage 1 ボス 【VERY HIGH】',
-            'STAGE2_ZAKO1': 'Stage 2 雑魚戦1',
-            'STAGE2_ZAKO2': 'Stage 2 雑魚戦2',
-            'STAGE2_MIDBOSS': 'Stage 2 中ボス 【HIGH】',
-            'STAGE2_ZAKO3': 'Stage 2 雑魚戦3',
-            'STAGE2_BOSS': 'Stage 2 ボス〠【VERY HIGH】',
-            'STAGE3_ZAKO1': 'Stage 3 雑魚戦1',
-            'STAGE3_ZAKO2': 'Stage 3 雑魚戦2',
-            'STAGE3_MIDBOSS': 'Stage 3 中ボス 【HIGH】',
-            'STAGE3_ZAKO3': 'Stage 3 雑魚戦3',
-            'STAGE3_BOSS': 'Stage 3 ボス 【VERY HIGH】'
+            'STAGE1_ZAKO1': '',
+            'STAGE1_ZAKO2': '',
+            'STAGE1_MIDBOSS': '',
+            'STAGE1_ZAKO3': '',
+            'STAGE1_BOSS': '',
+            'STAGE2_ZAKO1': '',
+            'STAGE2_ZAKO2': '',
+            'STAGE2_MIDBOSS': '',
+            'STAGE2_ZAKO3': '',
+            'STAGE2_BOSS': '',
+            'STAGE3_ZAKO1': '',
+            'STAGE3_ZAKO2': '',
+            'STAGE3_MIDBOSS': '',
+            'STAGE3_ZAKO3': '',
+            'STAGE3_BOSS': ''
         };
 
         const phaseText = tutorialActive
@@ -2981,7 +2995,7 @@ function beginStageWithoutTutorial() {
     setGameState('PLAYING');
 }
 function startGame(){setGameState('TUTORIAL_CHOICE');choiceSelection=0;}
-function proceedToNextStage(){if(stage<3){const nextStage=stage+1;stageTransitionStage=nextStage;stageTransitionTimer=STAGE_TRANSITION_FRAMES;startStage(nextStage);setGameState('PLAYING');}else{gameResult='CLEAR';clearTimeMs=performance.now()-gameStartTime;setGameState('GAMEOVER');}}
+function proceedToNextStage(){if(stage<3){const nextStage=stage+1;startStage(nextStage);setGameState('PLAYING');}else{gameResult='CLEAR';clearTimeMs=performance.now()-gameStartTime;setGameState('GAMEOVER');}}
 
 // 60fps固定ステップ
 // MacBook Proで従来のフレーム基準のゲーム速度を基準値として、
