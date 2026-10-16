@@ -254,48 +254,86 @@ function handleTouch(e){
     const jumpY = canvas.height - 92;
     const jumpR = Math.min(58, Math.max(44, canvas.width * 0.065));
 
-    for(let i=0;i<e.touches.length;i++){
-        const t=e.touches[i];
-        const x=(t.clientX-rect.left)*scaleX, y=(t.clientY-rect.top)*scaleY;
+for(let i=0;i<e.touches.length;i++){
+    const t=e.touches[i];
+    const x=(t.clientX-rect.left)*scaleX, y=(t.clientY-rect.top)*scaleY;
 
-if (gameState === 'INIT') {
-            requestFullScreen(); // ★ タッチ時に自動的に全画面化
-            if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
-                audioCtx.resume();
+    // --- スマホタッチ用：ポーズボタン＆ポーズ画面ボタン判定 ---
+    if (gameState === 'PLAYING') {
+        // 1. 右上のポーズボタンがタップされた時（touchstart時のみ判定して連打誤動作を防止）
+        if (e.type === 'touchstart' && [1, 2, 3].includes(stage) && isPointInRect(x, y, getMenuButtonRect())) {
+            isPaused = !isPaused;
+            continue;
+        }
+
+        // 2. ポーズ画面が開いている時の各種ボタンのタップ判定
+        if (isPaused) {
+            if (e.type === 'touchstart') {
+                const mw = Math.min(520, canvas.width * 0.85);
+                const mh = Math.min(420, canvas.height * 0.75);
+                const mx = (canvas.width - mw) / 2;
+                const my = (canvas.height - mh) / 2;
+
+                const bw = Math.min(360, mw * 0.8);
+                const bh = 55;
+                const bx = (canvas.width - bw) / 2;
+
+                const btnResume  = { bx, by: my + 120, bw, bh };
+                const btnRestart = { bx, by: my + 200, bw, bh };
+                const btnTitle   = { bx, by: my + 280, bw, bh };
+
+                if (isPointInRect(x, y, btnResume)) {
+                    isPaused = false;
+                } else if (isPointInRect(x, y, btnRestart)) {
+                    isPaused = false;
+                    restartGame();
+                } else if (isPointInRect(x, y, btnTitle)) {
+                    isPaused = false;
+                    setGameState('TITLE');
+                }
             }
-            setGameState('TITLE');
-            continue;
+            continue; // ポーズ中は自機移動・攻撃などのゲーム内タッチ入力をスキップ
         }
-if(gameState==='TITLE'&&isTitleAnimFinished){
-            if(isPointInRect(x,y,getFullscreenButtonRect())){ toggleFullscreen(); continue; } // ★ 全画面ボタン判定
-            if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
-            else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
-            else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
-            continue;
+    }
+
+    if (gameState === 'INIT') {
+        requestFullScreen(); // ★ タッチ時に自動的に全画面化
+        if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') {
+            audioCtx.resume();
         }
-        if(gameState==='HOW_TO_PLAY'){
-            if(isPointInRect(x,y,getHowToBackButtonRect())) setGameState('TITLE');
-            continue;
-        }
-        if(gameState==='CREDITS'){
-            if(isPointInRect(x,y,getCreditsBackButtonRect())) setGameState('TITLE');
-            continue;
-        }
-        if(gameState==='TUTORIAL_CHOICE'){
-            const rs=getChoiceRects();
-            if(isPointInRect(x,y,rs[0])) beginTutorial();
-            else if(isPointInRect(x,y,rs[1])) beginStageWithoutTutorial();
-            continue;
-        }
-        if(gameState==='STAGE_CLEAR'){
-            if(isPointInRect(x,y,getStageClearButtonRect())) proceedToNextStage();
-            continue;
-        }
-        if(gameState==='GAMEOVER'){
-            if(hitCount >= MAX_PLAYER_HP && isPointInRect(x,y,getGameOverRestartButtonRect())) restartGame();
-            continue;
-        }
-        if(gameState!=='PLAYING') continue;
+        setGameState('TITLE');
+        continue;
+    }
+    if(gameState==='TITLE'&&isTitleAnimFinished){
+        if(isPointInRect(x,y,getFullscreenButtonRect())){ toggleFullscreen(); continue; } // ★ 全画面ボタン判定
+        if(isPointInRect(x,y,getTitleButtonRect())) setGameState('TUTORIAL_CHOICE');
+        else if(isPointInRect(x,y,getHowToButtonRect())) setGameState('HOW_TO_PLAY');
+        else if(isPointInRect(x,y,getCreditsButtonRect())) setGameState('CREDITS');
+        continue;
+    }
+    if(gameState==='HOW_TO_PLAY'){
+        if(isPointInRect(x,y,getHowToBackButtonRect())) setGameState('TITLE');
+        continue;
+    }
+    if(gameState==='CREDITS'){
+        if(isPointInRect(x,y,getCreditsBackButtonRect())) setGameState('TITLE');
+        continue;
+    }
+    if(gameState==='TUTORIAL_CHOICE'){
+        const rs=getChoiceRects();
+        if(isPointInRect(x,y,rs[0])) beginTutorial();
+        else if(isPointInRect(x,y,rs[1])) beginStageWithoutTutorial();
+        continue;
+    }
+    if(gameState==='STAGE_CLEAR'){
+        if(isPointInRect(x,y,getStageClearButtonRect())) proceedToNextStage();
+        continue;
+    }
+    if(gameState==='GAMEOVER'){
+        if(hitCount >= MAX_PLAYER_HP && isPointInRect(x,y,getGameOverRestartButtonRect())) restartGame();
+        continue;
+    }
+    if(gameState!=='PLAYING') continue;
         
         const dx = x - joyX, dy = y - joyY, dist = Math.hypot(dx, dy);
         // タッチ判定領域を少し広げて誤操作を防止 (joyR * 2.2)
