@@ -201,6 +201,7 @@ canvas.addEventListener('click', e => {
             restartGame();
         } else if (isPointInRect(x, y, btnTitle)) {
             isPaused = false;
+            playBGM('title');
             setGameState('TITLE');
         }
         return;
@@ -289,6 +290,7 @@ for(let i=0;i<e.touches.length;i++){
                     restartGame();
                 } else if (isPointInRect(x, y, btnTitle)) {
                     isPaused = false;
+                    playBGM('title');
                     setGameState('TITLE');
                 }
             }
