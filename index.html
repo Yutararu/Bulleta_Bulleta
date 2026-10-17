@@ -2770,7 +2770,6 @@ drawGravityTransitionEffect();
             ctx.fillText('リスタート', canvas.width/2, restartRect.by + restartRect.bh * 0.63);
             ctx.fillStyle = '#fff';
             ctx.font = `${Math.min(18, canvas.width * 0.032)}px GameFont, sans-serif`;
-            ctx.fillText('Enter / クリックでリスタート', canvas.width/2, restartRect.by + restartRect.bh + 30);
         } else {
             // ステージ3（全クリア）時
             ctx.fillText('ALL CLEAR!', canvas.width/2, canvas.height/2 - 110);
@@ -2789,7 +2788,6 @@ drawGravityTransitionEffect();
             // 操作案内
             ctx.fillStyle = '#aaaaaa';
             ctx.font = '18px GameFont, sans-serif';
-            ctx.fillText('Enter / クリックでリスタート', canvas.width/2, canvas.height/2 + 135);
         }
         ctx.restore();
     }
