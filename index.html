@@ -166,9 +166,16 @@ function getMenuButtonRect() {
 }
 function isPointInRect(x,y,r){return x>=r.bx&&x<=r.bx+r.bw&&y>=r.by&&y<=r.by+r.bh;}
 
+let isTouchDevice = false; // タッチ操作が行われたかを記録するフラグ
+
+// touchstart が発生したらタッチデバイスとして判定
+window.addEventListener('touchstart', () => { isTouchDevice = true; }, { once: true, passive: true });
+
 canvas.addEventListener('click', e => {
+    // スマホ等のタッチ操作で発火した click イベントなら処理をスキップ
+    if (isTouchDevice) return;
+
     const r = canvas.getBoundingClientRect();
-    // 表示サイズから内部解像度(1280x720)への倍率を計算して座標を補正
     const scaleX = canvas.width / r.width;
     const scaleY = canvas.height / r.height;
     const x = (e.clientX - r.left) * scaleX;
